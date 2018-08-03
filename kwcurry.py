@@ -88,6 +88,7 @@ class KwFunc(KwCalc):
         self._left = _ensure_callable(left)
         self._right = _ensure_callable(right)
         self._kwargs = kwargs
+        self._out_keywords = set(self._left._out_keywords) | set(self._right._out_keywords) - set(self._kwargs.keys())
 
     def __call__(self, *args, **kwargs):
         left = self._left(**kwargs)
@@ -135,8 +136,26 @@ class Variable(KwCalc):
         return kwargs[self._name]
 
 
+class KwCurry(KwCalc):
+    def __init__(self, func, **kwargs):
+        self._func = _ensure_callable(func)
+        self._kwargs = kwargs
+        self._out_keywords = self._func._out_keywords - set(kwargs.keys())
+
+    def __call__(self, **kwargs):
+        # 参数都凑齐了。
+        if self._out_keywords - set(kwargs.keys()):
+            return KwCurry(self, **kwargs)
+        tmp_kwargs = copy.copy(kwargs)
+        tmp_kwargs.update(self._kwargs)
+        return self._func(**tmp_kwargs)
+
+
 if __name__ == '__main__':
     def add(a, b):
         return a + b
     f = Variable('a') + Variable('b') + 10 - Variable('b')/2
     print(f(a=9, b=8))
+    f1 = KwCurry(f)(b=8)
+    print(f1(a=9))
+    print(f1(a=10))
