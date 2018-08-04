@@ -23,6 +23,21 @@ def fmap(func, formular, reverse=False):
     return apply
 
 
+def check_kwargs(func):
+    def _func(self, **kwargs):
+        useless = set(kwargs.keys()) - self._out_keywords
+        if useless:
+            raise TypeError("Unexpected keyword %s" % useless)
+        if not kwargs:
+            return self
+        if self._out_keywords - set(kwargs.keys()):
+            return KwCurry(self, **kwargs)
+        kw = copy.copy(self._kwargs)
+        kw.update(kwargs)
+        return func(**kw)
+    return _func
+
+
 class KwCalc(object):
     __add__ = fmap(op.add, "self + other")
     __mul__ = fmap(op.mul, "self * other")
@@ -73,8 +88,9 @@ class KwCalc(object):
     __rxor__ = fmap(op.xor, "other ^ self", True)
 
     def _check_kwargs(self, **kwargs):
-        # todo
-        pass
+        if self._out_keywords - set(kwargs.keys()):
+            return False
+        return True
 
     def _prepare_kwargs(self, func, **kwargs):
         # todo
@@ -91,6 +107,8 @@ class KwFunc(KwCalc):
         self._out_keywords = set(self._left._out_keywords) | set(self._right._out_keywords) - set(self._kwargs.keys())
 
     def __call__(self, *args, **kwargs):
+        if not self._check_kwargs(**kwargs):
+            return KwCurry(self, **kwargs)
         left = self._left(**kwargs)
         right = self._right(**kwargs)
         return self._func(left, right)
@@ -111,6 +129,8 @@ class SimpleFunc(KwCalc):
         self._kwargs = kwargs
 
     def __call__(self, *args, **kwargs):
+        if not self._check_kwargs(**kwargs):
+            return KwCurry(self, **kwargs)
         kw = copy.copy(self._kwargs)
         kw.update(kwargs)
         return self._func(**kw)
@@ -133,6 +153,8 @@ class Variable(KwCalc):
         self._kwargs = {}
 
     def __call__(self, **kwargs):
+        if not self._check_kwargs(**kwargs):
+            return KwCurry(self, **kwargs)
         return kwargs[self._name]
 
 
@@ -155,7 +177,10 @@ if __name__ == '__main__':
     def add(a, b):
         return a + b
     f = Variable('a') + Variable('b') + 10 - Variable('b')/2
+    F = KwCurry(add)
     print(f(a=9, b=8))
-    f1 = KwCurry(f)(b=8)
+    f1 = f(b=8)
     print(f1(a=9))
     print(f1(a=10))
+
+    print(F(a=9)(b=8))
