@@ -7,7 +7,7 @@ import inspect
 
 
 def _ensure_callable(obj):
-    if isinstance(obj, (KwCalc, SimpleFunc, Const)):
+    if isinstance(obj, KwCalc):
         return obj
     if callable(obj):
         return SimpleFunc(obj)
@@ -28,13 +28,13 @@ def check_kwargs(func):
         useless = set(kwargs.keys()) - self._out_keywords
         if useless:
             raise TypeError("Unexpected keyword %s" % useless)
-        if not kwargs:
+        if not kwargs and self._out_keywords:
             return self
         if self._out_keywords - set(kwargs.keys()):
             return KwCurry(self, **kwargs)
         kw = copy.copy(self._kwargs)
         kw.update(kwargs)
-        return func(**kw)
+        return func(self, **kw)
     return _func
 
 
@@ -87,14 +87,9 @@ class KwCalc(object):
     __ror__ = fmap(op.or_, "other | self", True)
     __rxor__ = fmap(op.xor, "other ^ self", True)
 
-    def _check_kwargs(self, **kwargs):
-        if self._out_keywords - set(kwargs.keys()):
-            return False
-        return True
-
-    def _prepare_kwargs(self, func, **kwargs):
-        # todo
-        pass
+    def _call_func(self, func, **kwargs):
+        kw = {k: v for k, v in kwargs.items() if k in func._out_keywords}
+        return func(**kw)
 
 
 class KwFunc(KwCalc):
@@ -106,11 +101,10 @@ class KwFunc(KwCalc):
         self._kwargs = kwargs
         self._out_keywords = set(self._left._out_keywords) | set(self._right._out_keywords) - set(self._kwargs.keys())
 
+    @check_kwargs
     def __call__(self, *args, **kwargs):
-        if not self._check_kwargs(**kwargs):
-            return KwCurry(self, **kwargs)
-        left = self._left(**kwargs)
-        right = self._right(**kwargs)
+        left = self._call_func(self._left, **kwargs)
+        right = self._call_func(self._right, **kwargs)
         return self._func(left, right)
 
 
@@ -128,9 +122,8 @@ class SimpleFunc(KwCalc):
         self._out_keywords = set(all_args) - set(kwargs.keys())
         self._kwargs = kwargs
 
+    @check_kwargs
     def __call__(self, *args, **kwargs):
-        if not self._check_kwargs(**kwargs):
-            return KwCurry(self, **kwargs)
         kw = copy.copy(self._kwargs)
         kw.update(kwargs)
         return self._func(**kw)
@@ -142,6 +135,7 @@ class Const(KwCalc):
         self._out_keywords = set()
         self._kwargs = {}
 
+    @check_kwargs
     def __call__(self, **kwargs):
         return self._value
 
@@ -152,9 +146,8 @@ class Variable(KwCalc):
         self._out_keywords = {self._name}
         self._kwargs = {}
 
+    @check_kwargs
     def __call__(self, **kwargs):
-        if not self._check_kwargs(**kwargs):
-            return KwCurry(self, **kwargs)
         return kwargs[self._name]
 
 
@@ -164,23 +157,22 @@ class KwCurry(KwCalc):
         self._kwargs = kwargs
         self._out_keywords = self._func._out_keywords - set(kwargs.keys())
 
+    @check_kwargs
     def __call__(self, **kwargs):
-        # 参数都凑齐了。
-        if self._out_keywords - set(kwargs.keys()):
-            return KwCurry(self, **kwargs)
-        tmp_kwargs = copy.copy(kwargs)
-        tmp_kwargs.update(self._kwargs)
-        return self._func(**tmp_kwargs)
+        kw = copy.copy(kwargs)
+        kw.update(self._kwargs)
+        return self._call_func(self._func, **kw)
 
 
 if __name__ == '__main__':
     def add(a, b):
         return a + b
+
     f = Variable('a') + Variable('b') + 10 - Variable('b')/2
-    F = KwCurry(add)
     print(f(a=9, b=8))
     f1 = f(b=8)
     print(f1(a=9))
     print(f1(a=10))
 
+    F = KwCurry(add)
     print(F(a=9)(b=8))
