@@ -151,6 +151,9 @@ class Variable(KwCalc):
         return kwargs[self._name]
 
 
+# todo: add determine **kwargs,
+# todo: add functools
+# todo: execute part of functions when kwargs is enough
 class KwCurry(KwCalc):
     def __init__(self, func, **kwargs):
         self._func = _ensure_callable(func)
@@ -164,7 +167,12 @@ class KwCurry(KwCalc):
         return self._call_func(self._func, **kw)
 
 
+def kwcurry(func):
+    return KwCurry(func)
+
+
 if __name__ == '__main__':
+    @kwcurry
     def add(a, b):
         return a + b
 
@@ -174,5 +182,6 @@ if __name__ == '__main__':
     print(f1(a=9))
     print(f1(a=10))
 
-    F = KwCurry(add)
+    F = add
     print(F(a=9)(b=8))
+    print(F(a=9)(b=8, c=8))
